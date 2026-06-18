@@ -33,7 +33,12 @@ public class Main {
 
                 Path targetPath;
 
-                if (Paths.get(directoryName).isAbsolute()) {
+                if (directoryName.equals("~")) {
+
+                    targetPath = Paths.get(System.getenv("HOME"))
+                                      .normalize();
+
+                } else if (Paths.get(directoryName).isAbsolute()) {
 
                     targetPath = Paths.get(directoryName)
                                       .normalize();
