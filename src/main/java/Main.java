@@ -19,34 +19,72 @@ public class Main {
 
             char c = input.charAt(i);
 
-            if (c == '\\' && !inSingleQuotes && !inDoubleQuotes) {
+            if (inSingleQuotes) {
 
-                if (i + 1 < input.length()) {
-                    current.append(input.charAt(i + 1));
-                    i++;
+                if (c == '\'') {
+                    inSingleQuotes = false;
+                } else {
+                    current.append(c);
                 }
             }
 
-            else if (c == '\'' && !inDoubleQuotes) {
-                inSingleQuotes = !inSingleQuotes;
-            }
+            else if (inDoubleQuotes) {
 
-            else if (c == '"' && !inSingleQuotes) {
-                inDoubleQuotes = !inDoubleQuotes;
-            }
+                if (c == '\\') {
 
-            else if (Character.isWhitespace(c)
-                    && !inSingleQuotes
-                    && !inDoubleQuotes) {
+                    if (i + 1 < input.length()) {
 
-                if (current.length() > 0) {
-                    tokens.add(current.toString());
-                    current.setLength(0);
+                        char next = input.charAt(i + 1);
+
+                        if (next == '"' || next == '\\') {
+                            current.append(next);
+                            i++;
+                        } else {
+                            current.append('\\');
+                        }
+                    } else {
+                        current.append('\\');
+                    }
+                }
+
+                else if (c == '"') {
+                    inDoubleQuotes = false;
+                }
+
+                else {
+                    current.append(c);
                 }
             }
 
             else {
-                current.append(c);
+
+                if (c == '\\') {
+
+                    if (i + 1 < input.length()) {
+                        current.append(input.charAt(i + 1));
+                        i++;
+                    }
+                }
+
+                else if (c == '\'') {
+                    inSingleQuotes = true;
+                }
+
+                else if (c == '"') {
+                    inDoubleQuotes = true;
+                }
+
+                else if (Character.isWhitespace(c)) {
+
+                    if (current.length() > 0) {
+                        tokens.add(current.toString());
+                        current.setLength(0);
+                    }
+                }
+
+                else {
+                    current.append(c);
+                }
             }
         }
 
