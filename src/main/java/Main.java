@@ -8,6 +8,7 @@ import java.nio.file.Paths;
 public class Main {
 
     private static List<String> parseCommand(String input) {
+
         List<String> tokens = new ArrayList<>();
         StringBuilder current = new StringBuilder();
 
@@ -15,14 +16,25 @@ public class Main {
         boolean inDoubleQuotes = false;
 
         for (int i = 0; i < input.length(); i++) {
+
             char c = input.charAt(i);
 
-            if (c == '\'' && !inDoubleQuotes) {
+            if (c == '\\' && !inSingleQuotes && !inDoubleQuotes) {
+
+                if (i + 1 < input.length()) {
+                    current.append(input.charAt(i + 1));
+                    i++;
+                }
+            }
+
+            else if (c == '\'' && !inDoubleQuotes) {
                 inSingleQuotes = !inSingleQuotes;
             }
+
             else if (c == '"' && !inSingleQuotes) {
                 inDoubleQuotes = !inDoubleQuotes;
             }
+
             else if (Character.isWhitespace(c)
                     && !inSingleQuotes
                     && !inDoubleQuotes) {
@@ -32,6 +44,7 @@ public class Main {
                     current.setLength(0);
                 }
             }
+
             else {
                 current.append(c);
             }
@@ -85,12 +98,12 @@ public class Main {
                 if (directoryName.equals("~")) {
 
                     targetPath = Paths.get(System.getenv("HOME"))
-                                      .normalize();
+                            .normalize();
 
                 } else if (Paths.get(directoryName).isAbsolute()) {
 
                     targetPath = Paths.get(directoryName)
-                                      .normalize();
+                            .normalize();
 
                 } else {
 
@@ -101,8 +114,7 @@ public class Main {
 
                 File directory = targetPath.toFile();
 
-                if (directory.exists()
-                        && directory.isDirectory()) {
+                if (directory.exists() && directory.isDirectory()) {
 
                     currentDirectory = targetPath;
 
