@@ -45,6 +45,13 @@ public class Main {
                     commandTokens.add(token);
                 }
             }
+            if (stderrFile != null) {
+    Files.writeString(
+            Path.of(stderrFile),
+            "",
+            StandardOpenOption.CREATE,
+            StandardOpenOption.TRUNCATE_EXISTING);
+}
 
             if (commandTokens.isEmpty()) {
                 continue;
