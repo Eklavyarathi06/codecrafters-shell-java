@@ -1,81 +1,198 @@
-import java.util.Scanner;
-import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.io.*;
+import java.nio.file.*;
+import java.util.*;
 
 public class Main {
 
-    private static List<String> parseCommand(String input) {
+    private static Path currentDirectory =
+            Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
 
+    private static final Set<String> BUILTINS =
+            Set.of("echo", "exit", "type", "pwd", "cd");
+
+    public static void main(String[] args) throws Exception {
+        Scanner scanner = new Scanner(System.in);
+
+        while (true) {
+            System.out.print("$ ");
+
+            if (!scanner.hasNextLine()) {
+                break;
+            }
+
+            String input = scanner.nextLine();
+            List<String> tokens = parseCommand(input);
+
+            if (tokens.isEmpty()) {
+                continue;
+            }
+
+            String command = tokens.get(0);
+
+            if (command.equals("exit")) {
+                break;
+            }
+
+            else if (command.equals("echo")) {
+                for (int i = 1; i < tokens.size(); i++) {
+                    if (i > 1) System.out.print(" ");
+                    System.out.print(tokens.get(i));
+                }
+                System.out.println();
+            }
+
+            else if (command.equals("pwd")) {
+                System.out.println(currentDirectory);
+            }
+
+            else if (command.equals("cd")) {
+                if (tokens.size() < 2) {
+                    continue;
+                }
+
+                String pathArg = tokens.get(1);
+                Path target;
+
+                if (pathArg.equals("~")) {
+                    target = Paths.get(System.getenv("HOME"));
+                } else {
+                    Path path = Paths.get(pathArg);
+
+                    if (path.isAbsolute()) {
+                        target = path.normalize();
+                    } else {
+                        target = currentDirectory.resolve(path).normalize();
+                    }
+                }
+
+                if (Files.exists(target) && Files.isDirectory(target)) {
+                    currentDirectory = target;
+                } else {
+                    System.out.println("cd: " + pathArg + ": No such file or directory");
+                }
+            }
+
+            else if (command.equals("type")) {
+                if (tokens.size() < 2) {
+                    continue;
+                }
+
+                String cmd = tokens.get(1);
+
+                if (BUILTINS.contains(cmd)) {
+                    System.out.println(cmd + " is a shell builtin");
+                } else {
+                    String executablePath = findExecutable(cmd);
+
+                    if (executablePath != null) {
+                        System.out.println(cmd + " is " + executablePath);
+                    } else {
+                        System.out.println(cmd + ": not found");
+                    }
+                }
+            }
+
+            else {
+                String executablePath = findExecutable(command);
+
+                if (executablePath != null) {
+                    try {
+                        List<String> processCommand = new ArrayList<>();
+                        processCommand.add(command);
+
+                        for (int i = 1; i < tokens.size(); i++) {
+                            processCommand.add(tokens.get(i));
+                        }
+
+                        ProcessBuilder pb = new ProcessBuilder(processCommand);
+                        pb.directory(currentDirectory.toFile());
+                        pb.inheritIO();
+
+                        Process process = pb.start();
+                        process.waitFor();
+                    } catch (Exception e) {
+                        System.out.println(command + ": command not found");
+                    }
+                } else {
+                    System.out.println(command + ": command not found");
+                }
+            }
+        }
+    }
+
+    private static String findExecutable(String command) {
+        String pathEnv = System.getenv("PATH");
+
+        if (pathEnv == null || pathEnv.isEmpty()) {
+            return null;
+        }
+
+        String[] paths = pathEnv.split(File.pathSeparator);
+
+        for (String dir : paths) {
+            Path filePath = Paths.get(dir, command);
+
+            if (Files.exists(filePath) && Files.isRegularFile(filePath)
+                    && Files.isExecutable(filePath)) {
+                return filePath.toString();
+            }
+        }
+
+        return null;
+    }
+
+    private static List<String> parseCommand(String input) {
         List<String> tokens = new ArrayList<>();
         StringBuilder current = new StringBuilder();
 
-        boolean inSingleQuotes = false;
-        boolean inDoubleQuotes = false;
+        boolean inSingleQuote = false;
+        boolean inDoubleQuote = false;
 
         for (int i = 0; i < input.length(); i++) {
-
             char c = input.charAt(i);
 
-            if (inSingleQuotes) {
-
+            if (inSingleQuote) {
                 if (c == '\'') {
-                    inSingleQuotes = false;
+                    inSingleQuote = false;
                 } else {
                     current.append(c);
                 }
             }
 
-            else if (inDoubleQuotes) {
+            else if (inDoubleQuote) {
+                if (c == '"') {
+                    inDoubleQuote = false;
+                } else if (c == '\\' && i + 1 < input.length()) {
+                    char next = input.charAt(i + 1);
 
-                if (c == '\\') {
-
-                    if (i + 1 < input.length()) {
-
-                        char next = input.charAt(i + 1);
-
-                        if (next == '"' || next == '\\') {
-                            current.append(next);
-                            i++;
-                        } else {
-                            current.append('\\');
-                        }
+                    if (next == '"' || next == '\\' || next == '$' || next == '`') {
+                        current.append(next);
+                        i++;
                     } else {
                         current.append('\\');
                     }
-                }
-
-                else if (c == '"') {
-                    inDoubleQuotes = false;
-                }
-
-                else {
+                } else {
                     current.append(c);
                 }
             }
 
             else {
+                if (c == '\'') {
+                    inSingleQuote = true;
+                }
 
-                if (c == '\\') {
+                else if (c == '"') {
+                    inDoubleQuote = true;
+                }
 
+                else if (c == '\\') {
                     if (i + 1 < input.length()) {
                         current.append(input.charAt(i + 1));
                         i++;
                     }
                 }
 
-                else if (c == '\'') {
-                    inSingleQuotes = true;
-                }
-
-                else if (c == '"') {
-                    inDoubleQuotes = true;
-                }
-
                 else if (Character.isWhitespace(c)) {
-
                     if (current.length() > 0) {
                         tokens.add(current.toString());
                         current.setLength(0);
@@ -93,187 +210,5 @@ public class Main {
         }
 
         return tokens;
-    }
-
-    public static void main(String[] args) throws Exception {
-
-        Scanner scanner = new Scanner(System.in);
-
-        Path currentDirectory = Paths.get("").toAbsolutePath().normalize();
-
-        while (true) {
-
-            System.out.print("$ ");
-
-            String input = scanner.nextLine();
-
-            List<String> parts = parseCommand(input);
-
-            if (parts.isEmpty()) {
-                continue;
-            }
-
-            String command = parts.get(0);
-
-            if (command.equals("exit")) {
-                break;
-            }
-
-            else if (command.equals("pwd")) {
-                System.out.println(currentDirectory);
-            }
-
-            else if (command.equals("cd")) {
-
-                if (parts.size() < 2) {
-                    continue;
-                }
-
-                String directoryName = parts.get(1);
-
-                Path targetPath;
-
-                if (directoryName.equals("~")) {
-
-                    targetPath = Paths.get(System.getenv("HOME"))
-                            .normalize();
-
-                } else if (Paths.get(directoryName).isAbsolute()) {
-
-                    targetPath = Paths.get(directoryName)
-                            .normalize();
-
-                } else {
-
-                    targetPath = currentDirectory
-                            .resolve(directoryName)
-                            .normalize();
-                }
-
-                File directory = targetPath.toFile();
-
-                if (directory.exists() && directory.isDirectory()) {
-
-                    currentDirectory = targetPath;
-
-                } else {
-
-                    System.out.println(
-                            "cd: "
-                                    + directoryName
-                                    + ": No such file or directory");
-                }
-            }
-
-            else if (command.equals("echo")) {
-
-                StringBuilder output = new StringBuilder();
-
-                for (int i = 1; i < parts.size(); i++) {
-
-                    if (i > 1) {
-                        output.append(" ");
-                    }
-
-                    output.append(parts.get(i));
-                }
-
-                System.out.println(output);
-            }
-
-            else if (command.equals("type")) {
-
-                if (parts.size() < 2) {
-                    continue;
-                }
-
-                String typeCommand = parts.get(1);
-
-                if (typeCommand.equals("echo")
-                        || typeCommand.equals("exit")
-                        || typeCommand.equals("type")
-                        || typeCommand.equals("pwd")
-                        || typeCommand.equals("cd")) {
-
-                    System.out.println(typeCommand + " is a shell builtin");
-                }
-
-                else {
-
-                    String pathEnv = System.getenv("PATH");
-
-                    String[] directories =
-                            pathEnv.split(File.pathSeparator);
-
-                    boolean found = false;
-
-                    for (String directory : directories) {
-
-                        File file =
-                                new File(directory, typeCommand);
-
-                        if (file.exists()
-                                && file.isFile()
-                                && file.canExecute()) {
-
-                            System.out.println(
-                                    typeCommand + " is "
-                                            + file.getAbsolutePath());
-
-                            found = true;
-                            break;
-                        }
-                    }
-
-                    if (!found) {
-                        System.out.println(typeCommand + ": not found");
-                    }
-                }
-            }
-
-            else {
-
-                String pathEnv = System.getenv("PATH");
-
-                String[] directories =
-                        pathEnv.split(File.pathSeparator);
-
-                File executable = null;
-
-                for (String directory : directories) {
-
-                    File file =
-                            new File(directory, command);
-
-                    if (file.exists()
-                            && file.isFile()
-                            && file.canExecute()) {
-
-                        executable = file;
-                        break;
-                    }
-                }
-
-                if (executable != null) {
-
-                    ProcessBuilder processBuilder =
-                            new ProcessBuilder(parts);
-
-                    processBuilder.directory(currentDirectory.toFile());
-
-                    processBuilder.inheritIO();
-
-                    Process process =
-                            processBuilder.start();
-
-                    process.waitFor();
-
-                } else {
-
-                    System.out.println(
-                            input + ": command not found");
-                }
-            }
-        }
     }
 }
