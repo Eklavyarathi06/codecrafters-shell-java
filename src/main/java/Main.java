@@ -1,5 +1,7 @@
 import java.util.Scanner;
 import java.io.File;
+import java.util.Arrays;
+import java.util.List;
 
 public class Main {
 
@@ -66,7 +68,52 @@ public class Main {
             }
 
             else {
-                System.out.println(input + ": command not found");
+
+                String[] parts = input.split(" ");
+
+                String command = parts[0];
+
+                String pathEnv = System.getenv("PATH");
+
+                String[] directories =
+                        pathEnv.split(File.pathSeparator);
+
+                File executable = null;
+
+                for (String directory : directories) {
+
+                    File file =
+                            new File(directory, command);
+
+                    if (file.exists()
+                            && file.isFile()
+                            && file.canExecute()) {
+
+                        executable = file;
+                        break;
+                    }
+                }
+
+                if (executable != null) {
+
+                    List<String> commandWithArgs =
+                            Arrays.asList(parts);
+
+                    ProcessBuilder processBuilder =
+                            new ProcessBuilder(commandWithArgs);
+
+                    processBuilder.inheritIO();
+
+                    Process process =
+                            processBuilder.start();
+
+                    process.waitFor();
+
+                } else {
+
+                    System.out.println(
+                            input + ": command not found");
+                }
             }
         }
     }
