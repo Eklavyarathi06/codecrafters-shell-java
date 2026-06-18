@@ -27,30 +27,70 @@ public class Main {
                 continue;
             }
 
-            String command = tokens.get(0);
+            String stdoutFile = null;
+            List<String> commandTokens = new ArrayList<>();
+
+            for (int i = 0; i < tokens.size(); i++) {
+                String token = tokens.get(i);
+
+                if (token.equals(">") || token.equals("1>")) {
+                    if (i + 1 < tokens.size()) {
+                        stdoutFile = tokens.get(i + 1);
+                    }
+                    break;
+                }
+
+                commandTokens.add(token);
+            }
+
+            if (commandTokens.isEmpty()) {
+                continue;
+            }
+
+            String command = commandTokens.get(0);
 
             if (command.equals("exit")) {
                 break;
             }
 
             else if (command.equals("echo")) {
-                for (int i = 1; i < tokens.size(); i++) {
-                    if (i > 1) System.out.print(" ");
-                    System.out.print(tokens.get(i));
+                String output = "";
+
+                if (commandTokens.size() > 1) {
+                    output = String.join(" ", commandTokens.subList(1, commandTokens.size()));
                 }
-                System.out.println();
+
+                if (stdoutFile != null) {
+                    Files.writeString(
+                            Path.of(stdoutFile),
+                            output + System.lineSeparator(),
+                            StandardOpenOption.CREATE,
+                            StandardOpenOption.TRUNCATE_EXISTING);
+                } else {
+                    System.out.println(output);
+                }
             }
 
             else if (command.equals("pwd")) {
-                System.out.println(currentDirectory);
+                String output = currentDirectory.toString();
+
+                if (stdoutFile != null) {
+                    Files.writeString(
+                            Path.of(stdoutFile),
+                            output + System.lineSeparator(),
+                            StandardOpenOption.CREATE,
+                            StandardOpenOption.TRUNCATE_EXISTING);
+                } else {
+                    System.out.println(output);
+                }
             }
 
             else if (command.equals("cd")) {
-                if (tokens.size() < 2) {
+                if (commandTokens.size() < 2) {
                     continue;
                 }
 
-                String pathArg = tokens.get(1);
+                String pathArg = commandTokens.get(1);
                 Path target;
 
                 if (pathArg.equals("~")) {
@@ -73,22 +113,33 @@ public class Main {
             }
 
             else if (command.equals("type")) {
-                if (tokens.size() < 2) {
+                if (commandTokens.size() < 2) {
                     continue;
                 }
 
-                String cmd = tokens.get(1);
+                String cmd = commandTokens.get(1);
+                String output;
 
                 if (BUILTINS.contains(cmd)) {
-                    System.out.println(cmd + " is a shell builtin");
+                    output = cmd + " is a shell builtin";
                 } else {
                     String executablePath = findExecutable(cmd);
 
                     if (executablePath != null) {
-                        System.out.println(cmd + " is " + executablePath);
+                        output = cmd + " is " + executablePath;
                     } else {
-                        System.out.println(cmd + ": not found");
+                        output = cmd + ": not found";
                     }
+                }
+
+                if (stdoutFile != null) {
+                    Files.writeString(
+                            Path.of(stdoutFile),
+                            output + System.lineSeparator(),
+                            StandardOpenOption.CREATE,
+                            StandardOpenOption.TRUNCATE_EXISTING);
+                } else {
+                    System.out.println(output);
                 }
             }
 
@@ -97,19 +148,36 @@ public class Main {
 
                 if (executablePath != null) {
                     try {
-                        List<String> processCommand = new ArrayList<>();
-                        processCommand.add(command);
+                        ProcessBuilder pb = new ProcessBuilder(commandTokens);
+                        pb.directory(currentDirectory.toFile());
 
-                        for (int i = 1; i < tokens.size(); i++) {
-                            processCommand.add(tokens.get(i));
+                        if (stdoutFile != null) {
+                            pb.redirectOutput(new File(stdoutFile));
                         }
 
-                        ProcessBuilder pb = new ProcessBuilder(processCommand);
-                        pb.directory(currentDirectory.toFile());
-                        pb.inheritIO();
-
                         Process process = pb.start();
+
+                        BufferedReader errorReader =
+                                new BufferedReader(
+                                        new InputStreamReader(process.getErrorStream()));
+
+                        String line;
+                        while ((line = errorReader.readLine()) != null) {
+                            System.out.println(line);
+                        }
+
+                        if (stdoutFile == null) {
+                            BufferedReader outputReader =
+                                    new BufferedReader(
+                                            new InputStreamReader(process.getInputStream()));
+
+                            while ((line = outputReader.readLine()) != null) {
+                                System.out.println(line);
+                            }
+                        }
+
                         process.waitFor();
+
                     } catch (Exception e) {
                         System.out.println(command + ": command not found");
                     }
@@ -132,7 +200,8 @@ public class Main {
         for (String dir : paths) {
             Path filePath = Paths.get(dir, command);
 
-            if (Files.exists(filePath) && Files.isRegularFile(filePath)
+            if (Files.exists(filePath)
+                    && Files.isRegularFile(filePath)
                     && Files.isExecutable(filePath)) {
                 return filePath.toString();
             }
