@@ -28,19 +28,22 @@ public class Main {
             }
 
             String stdoutFile = null;
+            String stderrFile = null;
+
             List<String> commandTokens = new ArrayList<>();
 
             for (int i = 0; i < tokens.size(); i++) {
                 String token = tokens.get(i);
 
-                if (token.equals(">") || token.equals("1>")) {
-                    if (i + 1 < tokens.size()) {
-                        stdoutFile = tokens.get(i + 1);
-                    }
-                    break;
+                if ((token.equals(">") || token.equals("1>")) && i + 1 < tokens.size()) {
+                    stdoutFile = tokens.get(i + 1);
+                    i++;
+                } else if (token.equals("2>") && i + 1 < tokens.size()) {
+                    stderrFile = tokens.get(i + 1);
+                    i++;
+                } else {
+                    commandTokens.add(token);
                 }
-
-                commandTokens.add(token);
             }
 
             if (commandTokens.isEmpty()) {
@@ -108,7 +111,17 @@ public class Main {
                 if (Files.exists(target) && Files.isDirectory(target)) {
                     currentDirectory = target;
                 } else {
-                    System.out.println("cd: " + pathArg + ": No such file or directory");
+                    String error = "cd: " + pathArg + ": No such file or directory";
+
+                    if (stderrFile != null) {
+                        Files.writeString(
+                                Path.of(stderrFile),
+                                error + System.lineSeparator(),
+                                StandardOpenOption.CREATE,
+                                StandardOpenOption.TRUNCATE_EXISTING);
+                    } else {
+                        System.out.println(error);
+                    }
                 }
             }
 
@@ -155,15 +168,22 @@ public class Main {
                             pb.redirectOutput(new File(stdoutFile));
                         }
 
+                        if (stderrFile != null) {
+                            pb.redirectError(new File(stderrFile));
+                        }
+
                         Process process = pb.start();
 
-                        BufferedReader errorReader =
-                                new BufferedReader(
-                                        new InputStreamReader(process.getErrorStream()));
-
                         String line;
-                        while ((line = errorReader.readLine()) != null) {
-                            System.out.println(line);
+
+                        if (stderrFile == null) {
+                            BufferedReader errorReader =
+                                    new BufferedReader(
+                                            new InputStreamReader(process.getErrorStream()));
+
+                            while ((line = errorReader.readLine()) != null) {
+                                System.out.println(line);
+                            }
                         }
 
                         if (stdoutFile == null) {
