@@ -2,6 +2,7 @@ import java.util.Scanner;
 import java.io.File;
 import java.util.Arrays;
 import java.util.List;
+import java.nio.file.Paths;
 
 public class Main {
 
@@ -19,6 +20,14 @@ public class Main {
                 break;
             }
 
+            else if (input.equals("pwd")) {
+                System.out.println(
+                        Paths.get("")
+                                .toAbsolutePath()
+                                .normalize()
+                                .toString());
+            }
+
             else if (input.startsWith("echo ")) {
                 System.out.println(input.substring(5));
             }
@@ -29,7 +38,8 @@ public class Main {
 
                 if (command.equals("echo")
                         || command.equals("exit")
-                        || command.equals("type")) {
+                        || command.equals("type")
+                        || command.equals("pwd")) {
 
                     System.out.println(command + " is a shell builtin");
                 }
