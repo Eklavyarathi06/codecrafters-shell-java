@@ -31,14 +31,26 @@ public class Main {
 
                 String directoryName = input.substring(3);
 
-                File directory = new File(directoryName);
+                Path targetPath;
 
-                if (directory.exists() && directory.isDirectory()) {
+                if (Paths.get(directoryName).isAbsolute()) {
 
-                    currentDirectory =
-                            directory.toPath()
-                                     .toAbsolutePath()
-                                     .normalize();
+                    targetPath = Paths.get(directoryName)
+                                      .normalize();
+
+                } else {
+
+                    targetPath = currentDirectory
+                            .resolve(directoryName)
+                            .normalize();
+                }
+
+                File directory = targetPath.toFile();
+
+                if (directory.exists()
+                        && directory.isDirectory()) {
+
+                    currentDirectory = targetPath;
 
                 } else {
 
