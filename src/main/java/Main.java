@@ -52,7 +52,7 @@ public class Main {
         List<Job> toRemove = new ArrayList<>();
         for (Job job : jobTable) {
             if (job.canReap()) {
-                System.out.println("[" + job.number + "] done " + job.displayCommand);
+                System.out.println("[" + job.number + "]+  Done                    " + job.displayCommand + " &");
                 System.out.flush();
                 toRemove.add(job);
             }
@@ -344,7 +344,7 @@ public class Main {
 
             case "jobs" -> {
                 for (Job job : jobTable) {
-                    stdoutTarget.println("[" + job.number + "] running " + job.displayCommand);
+                    stdoutTarget.println("[" + job.number + "]+  Running                 " + job.displayCommand + " &");
                 }
             }
 
