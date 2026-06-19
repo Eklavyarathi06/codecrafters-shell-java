@@ -10,14 +10,10 @@ public class Main {
     private static final Set<String> BUILTINS =
             Set.of("echo", "exit", "type", "pwd", "cd", "jobs");
 
-    // =========================================================================
-    // Background Job tracking
-    // =========================================================================
-
     static class Job {
         final int number;
         final Process process;
-        final String displayCommand;       // reconstructed from tokens for display
+        final String displayCommand;       
 
         Job(int number, Process process, String displayCommand) {
             this.number = number;
@@ -25,16 +21,13 @@ public class Main {
             this.displayCommand = displayCommand;
         }
 
-        /** True once the process has finished. */
         boolean canReap() {
             return !process.isAlive();
         }
     }
 
-    /** Live job table, ordered by insertion. */
     private static final List<Job> jobTable = new ArrayList<>();
 
-    /** Allocate the lowest unused job number (recycled after reaping). */
     private static int allocateJobNumber() {
         Set<Integer> used = new HashSet<>();
         for (Job j : jobTable) used.add(j.number);
@@ -43,11 +36,6 @@ public class Main {
         }
     }
 
-    /**
-     * Call before every prompt.
-     * Reaped jobs: print buffered stdout/stderr, then print "[N] done <cmd>",
-     * then remove from table (freeing the job number).
-     */
     private static void reapCompletedJobs() {
         List<Job> toRemove = new ArrayList<>();
         int size = jobTable.size();
@@ -65,15 +53,10 @@ public class Main {
         jobTable.removeAll(toRemove);
     }
 
-    // =========================================================================
-    // Entry point / REPL
-    // =========================================================================
-
     public static void main(String[] args) throws Exception {
         Scanner scanner = new Scanner(System.in);
 
         while (true) {
-            // Reap before every prompt (satisfies "Reap before the next prompt" stage)
             reapCompletedJobs();
 
             System.out.print("$ ");
@@ -85,7 +68,6 @@ public class Main {
             List<String> tokens = parseCommand(input);
             if (tokens.isEmpty()) continue;
 
-            // Detect trailing & for background execution
             boolean background = false;
             if (!tokens.isEmpty() && tokens.get(tokens.size() - 1).equals("&")) {
                 background = true;
@@ -93,7 +75,6 @@ public class Main {
                 if (tokens.isEmpty()) continue;
             }
 
-            // Split on pipes
             List<List<String>> segments = splitOnPipe(tokens);
 
             if (background) {
@@ -106,16 +87,10 @@ public class Main {
         }
     }
 
-    // =========================================================================
-    // Background execution
-    // =========================================================================
-
     private static void startBackground(List<List<String>> segments) throws Exception {
-        // Build display string from all segments (joined by " | ")
         StringBuilder displayCmd = new StringBuilder();
         for (int i = 0; i < segments.size(); i++) {
             if (i > 0) displayCmd.append(" | ");
-            // Each segment's display excludes redirection operators but keeps command tokens
             Redirection r = parseRedirection(segments.get(i));
             displayCmd.append(String.join(" ", r.commandTokens));
         }
@@ -129,7 +104,6 @@ public class Main {
             if (command.equals("exit")) { System.exit(0); }
 
             if (BUILTINS.contains(command)) {
-                // Builtins finish instantly — run inline and print output immediately
                 ByteArrayOutputStream capture = new ByteArrayOutputStream();
                 PrintStream captureOut = new PrintStream(capture);
                 executeBuiltin(redir, captureOut);
@@ -150,7 +124,6 @@ public class Main {
             ProcessBuilder pb = new ProcessBuilder(redir.commandTokens);
             pb.directory(currentDirectory.toFile());
 
-            // Apply stdout/stderr file redirections if any
             if (redir.stdoutFile != null) {
                 File f = new File(redir.stdoutFile);
                 pb.redirectOutput(redir.stdoutAppend
@@ -177,7 +150,6 @@ public class Main {
             System.out.flush();
 
         } else {
-            // Pipeline in background — run it asynchronously in a thread
             String display = displayCmd.toString();
             List<List<String>> segCopy = segments;
             Thread pipeThread = new Thread(() -> {
@@ -186,16 +158,9 @@ public class Main {
             });
             pipeThread.setDaemon(true);
 
-            // Wrap in a fake Process-like job using a dummy approach:
-            // We start the pipeline in a thread and track it via a synthetic process
-            // For simplicity, just run the pipeline in background thread (no job table entry)
             pipeThread.start();
         }
     }
-
-    // =========================================================================
-    // Pipeline execution
-    // =========================================================================
 
     private static void executePipeline(List<List<String>> segments) throws Exception {
         List<ProcessBuilder> builders = new ArrayList<>();
@@ -317,10 +282,6 @@ public class Main {
         }
     }
 
-    // =========================================================================
-    // Simple (non-pipeline, non-background) command execution
-    // =========================================================================
-
     private static void executeSimple(List<String> tokens) throws Exception {
         Redirection redir = parseRedirection(tokens);
         if (redir.commandTokens.isEmpty()) return;
@@ -335,10 +296,6 @@ public class Main {
             executeExternal(redir);
         }
     }
-
-    // =========================================================================
-    // Builtin execution
-    // =========================================================================
 
     private static void executeBuiltin(Redirection redir, PrintStream captureOut)
             throws Exception {
@@ -421,10 +378,6 @@ public class Main {
         }
     }
 
-    // =========================================================================
-    // External command execution
-    // =========================================================================
-
     private static void executeExternal(Redirection redir) throws Exception {
         String command = redir.commandTokens.get(0);
         String executablePath = findExecutable(command);
@@ -473,10 +426,6 @@ public class Main {
         }
     }
 
-    // =========================================================================
-    // Redirection parsing
-    // =========================================================================
-
     static class Redirection {
         final List<String> commandTokens;
         final String stdoutFile;
@@ -522,8 +471,6 @@ public class Main {
             }
         }
 
-        // POSIX: truncating redirections must create/truncate the file immediately,
-        // even if nothing is ever written to it.
         try {
             if (stdoutFile != null && !stdoutAppend) {
                 Files.newOutputStream(Path.of(stdoutFile),
@@ -537,10 +484,6 @@ public class Main {
 
         return new Redirection(commandTokens, stdoutFile, stdoutAppend, stderrFile, stderrAppend);
     }
-
-    // =========================================================================
-    // Pipe splitting
-    // =========================================================================
 
     private static List<List<String>> splitOnPipe(List<String> tokens) {
         List<List<String>> segments = new ArrayList<>();
@@ -556,10 +499,6 @@ public class Main {
         segments.add(current);
         return segments;
     }
-
-    // =========================================================================
-    // Helpers
-    // =========================================================================
 
     private static PrintStream resolveStdoutTarget(Redirection redir, PrintStream fallback)
             throws IOException {
@@ -590,10 +529,6 @@ public class Main {
         Files.write(Path.of(path), data, opts);
     }
 
-    // =========================================================================
-    // PATH lookup
-    // =========================================================================
-
     private static String findExecutable(String command) {
         String pathEnv = System.getenv("PATH");
         if (pathEnv == null || pathEnv.isEmpty()) return null;
@@ -607,18 +542,6 @@ public class Main {
         return null;
     }
 
-    // =========================================================================
-    // Tokenizer / parser
-    // =========================================================================
-
-    /**
-     * Tokenize a shell input line respecting:
-     *   single quotes  — no escaping inside
-     *   double quotes  — backslash escapes \", \\, \$, \`
-     *   backslash      — escapes next character outside quotes
-     *   |              — pipe operator, emitted as its own token
-     *   &              — background operator, emitted as its own token
-     */
     private static List<String> parseCommand(String input) {
         List<String> tokens = new ArrayList<>();
         StringBuilder current = new StringBuilder();
@@ -662,7 +585,6 @@ public class Main {
                         tokenStarted = true;
                     }
                 } else if (c == '|' || c == '&') {
-                    // Flush current token then emit operator
                     if (current.length() > 0 || tokenStarted) {
                         tokens.add(current.toString());
                         current.setLength(0);
