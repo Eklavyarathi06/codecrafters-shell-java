@@ -18,10 +18,6 @@ public class Main {
         final int number;
         final Process process;
         final String displayCommand;       // reconstructed from tokens for display
-        final ByteArrayOutputStream stdoutBuf = new ByteArrayOutputStream();
-        final ByteArrayOutputStream stderrBuf = new ByteArrayOutputStream();
-        Thread stdoutDrainer;
-        Thread stderrDrainer;
 
         Job(int number, Process process, String displayCommand) {
             this.number = number;
@@ -29,11 +25,9 @@ public class Main {
             this.displayCommand = displayCommand;
         }
 
-        /** True once the process AND both output-draining threads have finished. */
+        /** True once the process has finished. */
         boolean canReap() {
-            return !process.isAlive()
-                    && (stdoutDrainer == null || !stdoutDrainer.isAlive())
-                    && (stderrDrainer == null || !stderrDrainer.isAlive());
+            return !process.isAlive();
         }
     }
 
@@ -58,16 +52,6 @@ public class Main {
         List<Job> toRemove = new ArrayList<>();
         for (Job job : jobTable) {
             if (job.canReap()) {
-                // Print any buffered stdout
-                byte[] out = job.stdoutBuf.toByteArray();
-                if (out.length > 0) {
-                    try { System.out.write(out); } catch (IOException e) { /* ignore */ }
-                }
-                // Print any buffered stderr
-                byte[] err = job.stderrBuf.toByteArray();
-                if (err.length > 0) {
-                    try { System.err.write(err); } catch (IOException e) { /* ignore */ }
-                }
                 System.out.println("[" + job.number + "] done " + job.displayCommand);
                 System.out.flush();
                 toRemove.add(job);
@@ -167,35 +151,21 @@ public class Main {
                 pb.redirectOutput(redir.stdoutAppend
                         ? ProcessBuilder.Redirect.appendTo(f)
                         : ProcessBuilder.Redirect.to(f));
+            } else {
+                pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
             }
             if (redir.stderrFile != null) {
                 File f = new File(redir.stderrFile);
                 pb.redirectError(redir.stderrAppend
                         ? ProcessBuilder.Redirect.appendTo(f)
                         : ProcessBuilder.Redirect.to(f));
+            } else {
+                pb.redirectError(ProcessBuilder.Redirect.INHERIT);
             }
 
             Process process = pb.start();
             int num = allocateJobNumber();
             Job job = new Job(num, process, displayCmd.toString());
-
-            // Drain streams in daemon threads so we don't block the REPL
-            if (redir.stdoutFile == null) {
-                job.stdoutDrainer = new Thread(() -> {
-                    try { job.stdoutBuf.write(process.getInputStream().readAllBytes()); }
-                    catch (IOException ignored) {}
-                });
-                job.stdoutDrainer.setDaemon(true);
-                job.stdoutDrainer.start();
-            }
-            if (redir.stderrFile == null) {
-                job.stderrDrainer = new Thread(() -> {
-                    try { job.stderrBuf.write(process.getErrorStream().readAllBytes()); }
-                    catch (IOException ignored) {}
-                });
-                job.stderrDrainer.setDaemon(true);
-                job.stderrDrainer.start();
-            }
 
             jobTable.add(job);
             System.out.println("[" + num + "] " + process.pid());
