@@ -375,6 +375,27 @@ public class Main {
             }
         }
 
+        // POSIX: redirection operators must create/truncate the target file
+        // immediately, even if nothing is ever written to it.
+        try {
+            if (stdoutFile != null && !stdoutAppend) {
+                Files.newOutputStream(
+                        Path.of(stdoutFile),
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING
+                ).close();
+            }
+            if (stderrFile != null && !stderrAppend) {
+                Files.newOutputStream(
+                        Path.of(stderrFile),
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING
+                ).close();
+            }
+        } catch (IOException e) {
+            // Ignore: if the file can't be created, subsequent writes will also fail
+        }
+
         return new Redirection(commandTokens, stdoutFile, stdoutAppend, stderrFile, stderrAppend);
     }
 
