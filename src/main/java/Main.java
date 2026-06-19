@@ -57,7 +57,7 @@ public class Main {
                 char sign = ' ';
                 if (i == size - 1) sign = '+';
                 else if (i == size - 2) sign = '-';
-                System.out.println("[" + job.number + "]" + sign + "  Done                    " + job.displayCommand + " &");
+                System.out.println("[" + job.number + "]" + sign + "  Done                 " + job.displayCommand);
                 System.out.flush();
                 toRemove.add(job);
             }
@@ -349,13 +349,21 @@ public class Main {
 
             case "jobs" -> {
                 int size = jobTable.size();
+                List<Job> toRemove = new ArrayList<>();
                 for (int i = 0; i < size; i++) {
                     Job job = jobTable.get(i);
                     char sign = ' ';
                     if (i == size - 1) sign = '+';
                     else if (i == size - 2) sign = '-';
-                    stdoutTarget.println("[" + job.number + "]" + sign + "  Running                 " + job.displayCommand + " &");
+                    
+                    if (job.canReap()) {
+                        stdoutTarget.println("[" + job.number + "]" + sign + "  Done                 " + job.displayCommand);
+                        toRemove.add(job);
+                    } else {
+                        stdoutTarget.println("[" + job.number + "]" + sign + "  Running                 " + job.displayCommand + " &");
+                    }
                 }
+                jobTable.removeAll(toRemove);
             }
 
             default -> System.err.println(command + ": command not found");
