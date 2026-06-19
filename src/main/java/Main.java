@@ -198,7 +198,7 @@ public class Main {
     // =========================================================================
 
     private static void executePipeline(List<List<String>> segments) throws Exception {
-        byte[] stdinBytes = new byte[0];
+        List<ProcessBuilder> builders = new ArrayList<>();
 
         for (int i = 0; i < segments.size(); i++) {
             boolean isLast = (i == segments.size() - 1);
@@ -211,63 +211,59 @@ public class Main {
             if (command.equals("exit")) { System.exit(0); }
 
             if (BUILTINS.contains(command)) {
-                ByteArrayOutputStream capture = new ByteArrayOutputStream();
-                PrintStream captureOut = new PrintStream(capture);
-                executeBuiltin(redir, captureOut);
-
-                if (isLast) {
-                    byte[] out = capture.toByteArray();
-                    if (redir.stdoutFile != null) {
-                        writeToFile(redir.stdoutFile, out, redir.stdoutAppend);
-                    } else {
-                        System.out.write(out);
-                        System.out.flush();
-                    }
-                } else {
-                    stdinBytes = capture.toByteArray();
-                }
-            } else {
-                String executablePath = findExecutable(command);
-                if (executablePath == null) {
-                    try { writeErrorLine(redir, command + ": command not found"); }
-                    catch (IOException ioe) { System.err.println(command + ": command not found"); }
-                    stdinBytes = new byte[0];
-                    continue;
-                }
-
-                ProcessBuilder pb = new ProcessBuilder(redir.commandTokens);
-                pb.directory(currentDirectory.toFile());
-
-                if (redir.stderrFile != null) {
-                    File sf = new File(redir.stderrFile);
-                    pb.redirectError(redir.stderrAppend
-                            ? ProcessBuilder.Redirect.appendTo(sf)
-                            : ProcessBuilder.Redirect.to(sf));
-                } else {
-                    pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-                }
-
-                if (isLast) {
-                    if (redir.stdoutFile != null) {
-                        File of = new File(redir.stdoutFile);
-                        pb.redirectOutput(redir.stdoutAppend
-                                ? ProcessBuilder.Redirect.appendTo(of)
-                                : ProcessBuilder.Redirect.to(of));
-                    } else {
-                        pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-                    }
-                    Process process = pb.start();
-                    if (stdinBytes.length > 0) process.getOutputStream().write(stdinBytes);
-                    process.getOutputStream().close();
-                    process.waitFor();
-                } else {
-                    Process process = pb.start();
-                    if (stdinBytes.length > 0) process.getOutputStream().write(stdinBytes);
-                    process.getOutputStream().close();
-                    stdinBytes = process.getInputStream().readAllBytes();
-                    process.waitFor();
-                }
+                System.err.println("Pipelines with builtins are not supported in this implementation.");
+                return;
             }
+
+            String executablePath = findExecutable(command);
+            if (executablePath == null) {
+                System.err.println(command + ": command not found");
+                return;
+            }
+
+            List<String> finalCmd = new ArrayList<>();
+            finalCmd.add(executablePath);
+            finalCmd.addAll(redir.commandTokens.subList(1, redir.commandTokens.size()));
+
+            ProcessBuilder pb = new ProcessBuilder(finalCmd);
+            pb.directory(currentDirectory.toFile());
+
+            if (redir.stderrFile != null) {
+                File sf = new File(redir.stderrFile);
+                pb.redirectError(redir.stderrAppend
+                        ? ProcessBuilder.Redirect.appendTo(sf)
+                        : ProcessBuilder.Redirect.to(sf));
+            } else {
+                pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+            }
+
+            if (isLast) {
+                if (redir.stdoutFile != null) {
+                    File of = new File(redir.stdoutFile);
+                    pb.redirectOutput(redir.stdoutAppend
+                            ? ProcessBuilder.Redirect.appendTo(of)
+                            : ProcessBuilder.Redirect.to(of));
+                } else {
+                    pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                }
+            } else if (redir.stdoutFile != null) {
+                File of = new File(redir.stdoutFile);
+                pb.redirectOutput(redir.stdoutAppend
+                        ? ProcessBuilder.Redirect.appendTo(of)
+                        : ProcessBuilder.Redirect.to(of));
+            }
+
+            builders.add(pb);
+        }
+
+        if (builders.isEmpty()) return;
+
+        try {
+            List<Process> processes = ProcessBuilder.startPipeline(builders);
+            Process lastProcess = processes.get(processes.size() - 1);
+            lastProcess.waitFor();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
         }
     }
 
