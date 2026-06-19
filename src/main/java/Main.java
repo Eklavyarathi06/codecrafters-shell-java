@@ -50,9 +50,14 @@ public class Main {
      */
     private static void reapCompletedJobs() {
         List<Job> toRemove = new ArrayList<>();
-        for (Job job : jobTable) {
+        int size = jobTable.size();
+        for (int i = 0; i < size; i++) {
+            Job job = jobTable.get(i);
             if (job.canReap()) {
-                System.out.println("[" + job.number + "]+  Done                    " + job.displayCommand + " &");
+                char sign = ' ';
+                if (i == size - 1) sign = '+';
+                else if (i == size - 2) sign = '-';
+                System.out.println("[" + job.number + "]" + sign + "  Done                    " + job.displayCommand + " &");
                 System.out.flush();
                 toRemove.add(job);
             }
@@ -343,8 +348,13 @@ public class Main {
             }
 
             case "jobs" -> {
-                for (Job job : jobTable) {
-                    stdoutTarget.println("[" + job.number + "]+  Running                 " + job.displayCommand + " &");
+                int size = jobTable.size();
+                for (int i = 0; i < size; i++) {
+                    Job job = jobTable.get(i);
+                    char sign = ' ';
+                    if (i == size - 1) sign = '+';
+                    else if (i == size - 2) sign = '-';
+                    stdoutTarget.println("[" + job.number + "]" + sign + "  Running                 " + job.displayCommand + " &");
                 }
             }
 
