@@ -199,6 +199,10 @@ public class Main {
 
     private static void executePipeline(List<List<String>> segments) throws Exception {
         List<ProcessBuilder> builders = new ArrayList<>();
+        byte[] firstBuiltinOutput = null;
+        byte[] lastBuiltinOutput = null;
+        Redirection lastBuiltinRedir = null;
+        boolean lastSegmentIsBuiltin = false;
 
         for (int i = 0; i < segments.size(); i++) {
             boolean isLast = (i == segments.size() - 1);
@@ -207,12 +211,23 @@ public class Main {
             if (redir.commandTokens.isEmpty()) continue;
 
             String command = redir.commandTokens.get(0);
-
             if (command.equals("exit")) { System.exit(0); }
 
             if (BUILTINS.contains(command)) {
-                System.err.println("Pipelines with builtins are not supported in this implementation.");
-                return;
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                PrintStream ps = new PrintStream(baos);
+                executeBuiltin(redir, ps);
+                ps.flush();
+                
+                if (i == 0) {
+                    firstBuiltinOutput = baos.toByteArray();
+                }
+                if (isLast) {
+                    lastSegmentIsBuiltin = true;
+                    lastBuiltinOutput = baos.toByteArray();
+                    lastBuiltinRedir = redir;
+                }
+                continue;
             }
 
             String executablePath = findExecutable(command);
@@ -237,16 +252,7 @@ public class Main {
                 pb.redirectError(ProcessBuilder.Redirect.INHERIT);
             }
 
-            if (isLast) {
-                if (redir.stdoutFile != null) {
-                    File of = new File(redir.stdoutFile);
-                    pb.redirectOutput(redir.stdoutAppend
-                            ? ProcessBuilder.Redirect.appendTo(of)
-                            : ProcessBuilder.Redirect.to(of));
-                } else {
-                    pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-                }
-            } else if (redir.stdoutFile != null) {
+            if (redir.stdoutFile != null) {
                 File of = new File(redir.stdoutFile);
                 pb.redirectOutput(redir.stdoutAppend
                         ? ProcessBuilder.Redirect.appendTo(of)
@@ -256,12 +262,56 @@ public class Main {
             builders.add(pb);
         }
 
-        if (builders.isEmpty()) return;
+        if (!builders.isEmpty()) {
+            ProcessBuilder lastPb = builders.get(builders.size() - 1);
+            if (lastPb.redirectOutput() == ProcessBuilder.Redirect.PIPE) {
+                if (lastSegmentIsBuiltin) {
+                    lastPb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+                } else {
+                    lastPb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                }
+            }
+        }
+
+        if (builders.isEmpty()) {
+            if (lastSegmentIsBuiltin && lastBuiltinOutput != null) {
+                if (lastBuiltinRedir.stdoutFile != null) {
+                    writeToFile(lastBuiltinRedir.stdoutFile, lastBuiltinOutput, lastBuiltinRedir.stdoutAppend);
+                } else {
+                    System.out.write(lastBuiltinOutput);
+                    System.out.flush();
+                }
+            }
+            return;
+        }
 
         try {
-            List<Process> processes = ProcessBuilder.startPipeline(builders);
+            List<Process> processes;
+            if (builders.size() == 1) {
+                processes = List.of(builders.get(0).start());
+            } else {
+                processes = ProcessBuilder.startPipeline(builders);
+            }
+            
+            Process first = processes.get(0);
+            if (firstBuiltinOutput != null && firstBuiltinOutput.length > 0) {
+                first.getOutputStream().write(firstBuiltinOutput);
+                first.getOutputStream().flush();
+            }
+            first.getOutputStream().close();
+            
             Process lastProcess = processes.get(processes.size() - 1);
             lastProcess.waitFor();
+            
+            if (lastSegmentIsBuiltin && lastBuiltinOutput != null) {
+                if (lastBuiltinRedir.stdoutFile != null) {
+                    writeToFile(lastBuiltinRedir.stdoutFile, lastBuiltinOutput, lastBuiltinRedir.stdoutAppend);
+                } else {
+                    System.out.write(lastBuiltinOutput);
+                    System.out.flush();
+                }
+            }
+            
         } catch (Exception e) {
             System.err.println(e.getMessage());
         }
